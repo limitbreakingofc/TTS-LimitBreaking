@@ -1,0 +1,6 @@
+{
+  "name": "Sintetizador TTS",
+  "description": "Sintetizador de voz (TTS) do sistema com vozes retrô offline e inteligência artificial do Gemini.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
