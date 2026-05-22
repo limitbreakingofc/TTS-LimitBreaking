@@ -160,15 +160,13 @@ fun TtsSettingsScreen(modifier: Modifier = Modifier) {
                             isGenerating = false
                             if (decoded != null) {
                                 isPlaying = true
-                                withContext(Dispatchers.IO) {
-                                    playPcmBuffer(
-                                        decoded.pcmData,
-                                        decoded.sampleRate,
-                                        decoded.channelCount,
-                                        onStart = { track -> activeAudioTrack = track },
-                                        onComplete = { isPlaying = false }
-                                    )
-                                }
+                                playPcmBuffer(
+                                    decoded.pcmData,
+                                    decoded.sampleRate,
+                                    decoded.channelCount,
+                                    onStart = { track -> activeAudioTrack = track },
+                                    onComplete = { isPlaying = false }
+                                )
                             } else {
                                 Toast.makeText(context, "Erro decodificando áudio neural.", Toast.LENGTH_SHORT).show()
                             }
@@ -187,15 +185,13 @@ fun TtsSettingsScreen(modifier: Modifier = Modifier) {
                         ProceduralRobotSynth.synthesize(testText, robotSpeed, robotPitch, robotStyle)
                     }
                     
-                    withContext(Dispatchers.IO) {
-                        playPcmBuffer(
-                            audioBytes,
-                            16000,
-                            1,
-                            onStart = { track -> activeAudioTrack = track },
-                            onComplete = { isPlaying = false }
-                        )
-                    }
+                    playPcmBuffer(
+                        audioBytes,
+                        16000,
+                        1,
+                        onStart = { track -> activeAudioTrack = track },
+                        onComplete = { isPlaying = false }
+                    )
                 }
             }
         }
@@ -990,20 +986,21 @@ fun LogItemCard(log: SpeechLogItem) {
 }
 
 // Low-level PCM direct media playing structure using AudioTrack.write()
-private fun playPcmBuffer(
+private suspend fun playPcmBuffer(
     pcmData: ByteArray,
     sampleRate: Int,
     channelCount: Int,
     onStart: (AudioTrack) -> Unit,
     onComplete: () -> Unit
-) {
+) = withContext(Dispatchers.IO) {
+    var audioTrack: AudioTrack? = null
     try {
         val channelConfig = if (channelCount == 2) AudioFormat.CHANNEL_OUT_STEREO else AudioFormat.CHANNEL_OUT_MONO
         val sampleSize = AudioFormat.ENCODING_PCM_16BIT
         val minBufferSize = AudioTrack.getMinBufferSize(sampleRate, channelConfig, sampleSize)
         val bufferSize = Math.max(minBufferSize, pcmData.size)
 
-        val audioTrack = AudioTrack.Builder()
+        audioTrack = AudioTrack.Builder()
             .setAudioAttributes(AudioAttributes.Builder()
                 .setUsage(AudioAttributes.USAGE_MEDIA)
                 .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
@@ -1018,22 +1015,28 @@ private fun playPcmBuffer(
             .build()
 
         audioTrack.write(pcmData, 0, pcmData.size)
-        onStart(audioTrack)
+        
+        withContext(Dispatchers.Main) {
+            onStart(audioTrack)
+        }
+        
         audioTrack.play()
 
         // Wait play end duration to discharge resources
         val durationMs = (pcmData.size.toDouble() / (sampleRate * channelCount * 2) * 1000).toLong()
-        Thread.sleep(durationMs + 150)
+        delay(durationMs + 150)
         
-        try {
-            audioTrack.stop()
-        } catch (e: Exception) {}
-        try {
-            audioTrack.release()
-        } catch (e: Exception) {}
-        onComplete()
     } catch (e: Exception) {
         Log.e("AudioTrack", "In-app playback failed: ${e.message}")
-        onComplete()
+    } finally {
+        try {
+            audioTrack?.stop()
+        } catch (e: Exception) {}
+        try {
+            audioTrack?.release()
+        } catch (e: Exception) {}
+        withContext(Dispatchers.Main) {
+            onComplete()
+        }
     }
 }
