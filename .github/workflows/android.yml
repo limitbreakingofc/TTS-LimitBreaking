@@ -1,0 +1,119 @@
+name: Android CI & Release
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build & Package APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Configure Keystore Files
+        run: |
+          # 1. Setup Debug Keystore
+          if [ -f debug.keystore.base64 ]; then
+            echo "Decoding debug.keystore from base64..."
+            base64 -d debug.keystore.base64 > debug.keystore
+          else
+            echo "Generating clean debug.keystore..."
+            keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+          fi
+
+          # 2. Setup Release Keystore if provided via secrets
+          if [ -n "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" ]; then
+            echo "Decoding release keystore..."
+            echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 -d > my-upload-key.jks
+          fi
+
+      - name: Grant Execute Permission to Gradlew
+        run: chmod +x gradlew
+
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug
+
+      - name: Build Release APK
+        env:
+          KEYSTORE_PATH: "my-upload-key.jks"
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ -n "${{ secrets.STORE_PASSWORD }}" ] && [ -n "${{ secrets.KEY_PASSWORD }}" ] && [ -f "my-upload-key.jks" ]; then
+            echo "Secrets found. Building release APK..."
+            ./gradlew assembleRelease
+          else
+            echo "Release secrets not configured. Skipping release build step."
+          fi
+
+      - name: Rename & Organize Artifacts
+        run: |
+          mkdir -p build-artifacts
+          if [ -f app/build/outputs/apk/debug/app-debug.apk ]; then
+            cp app/build/outputs/apk/debug/app-debug.apk build-artifacts/Sintetizador-TTS-Debug.apk
+          fi
+          if [ -f app/build/outputs/apk/release/app-release.apk ]; then
+            cp app/build/outputs/apk/release/app-release.apk build-artifacts/Sintetizador-TTS-Release.apk
+          fi
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: built-apks
+          path: build-artifacts/*
+
+      - name: Create Draft Release (On Push to Main)
+        if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') && github.event_name == 'push'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build-artifacts/*
+          tag_name: latest
+          name: "Latest Build Assets (Auto)"
+          body: |
+            Esta é uma compilação automática baseada no commit mais recente da branch `main`/`master`.
+            
+            **Arquivos de download:**
+            * [Sintetizador-TTS-Debug.apk](https://github.com/${{ github.repository }}/releases/download/latest/Sintetizador-TTS-Debug.apk) - Instale no seu celular para testar agora mesmo!
+          draft: false
+          prerelease: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create Official Tag Release (On Tag Push)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build-artifacts/*
+          name: "Versão ${{ github.ref_name }}"
+          body: |
+            ### Versão Oficial de **Sintetizador TTS** 🎉
+
+            Baixe o APK correspondente abaixo para instalar no seu aparelho Android:
+
+            - 📲 **Sintetizador-TTS-Debug.apk**: APK pré-assinado recomendável para instalação e testes imediatos.
+            - 🔑 **Sintetizador-TTS-Release.apk**: APK final de produção (disponível caso as chaves privadas tenham sido configuradas).
+          draft: false
+          prerelease: false
+          token: ${{ secrets.GITHUB_TOKEN }}
