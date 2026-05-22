@@ -13,6 +13,7 @@ object TtsSettingsManager {
     private const val KEY_ROBOT_SPEED = "robot_speed"
     private const val KEY_ROBOT_STYLE = "robot_style"
     private const val KEY_GEMINI_API_KEY = "gemini_api_key"
+    private const val KEY_GEMINI_MODEL = "gemini_model"
     private const val KEY_SPEECH_LOGS = "speech_logs"
 
     private fun getPrefs(context: Context): SharedPreferences {
@@ -60,11 +61,29 @@ object TtsSettingsManager {
     }
 
     fun getGeminiApiKey(context: Context): String {
-        return getPrefs(context).getString(KEY_GEMINI_API_KEY, "") ?: ""
+        val saved = getPrefs(context).getString(KEY_GEMINI_API_KEY, "") ?: ""
+        if (saved.trim().isNotEmpty() && saved != "MY_GEMINI_API_KEY") {
+            return saved
+        }
+        try {
+            val key = com.example.BuildConfig.GEMINI_API_KEY
+            if (key.isNotBlank() && key != "MY_GEMINI_API_KEY") {
+                return key
+            }
+        } catch (e: Exception) {}
+        return ""
     }
 
     fun setGeminiApiKey(context: Context, value: String) {
         getPrefs(context).edit().putString(KEY_GEMINI_API_KEY, value).apply()
+    }
+
+    fun getGeminiModel(context: Context): String {
+        return getPrefs(context).getString(KEY_GEMINI_MODEL, "gemini-2.5-flash-preview-tts") ?: "gemini-2.5-flash-preview-tts"
+    }
+
+    fun setGeminiModel(context: Context, value: String) {
+        getPrefs(context).edit().putString(KEY_GEMINI_MODEL, value).apply()
     }
 
     fun addSpeechLog(context: Context, text: String, engine: String) {

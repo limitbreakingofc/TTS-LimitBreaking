@@ -83,6 +83,7 @@ fun TtsSettingsScreen(modifier: Modifier = Modifier) {
     var robotSpeed by remember { mutableStateOf(TtsSettingsManager.getRobotSpeed(context)) }
     var robotStyle by remember { mutableStateOf(TtsSettingsManager.getRobotStyle(context)) }
     var geminiVoice by remember { mutableStateOf(TtsSettingsManager.getVoiceName(context)) }
+    var geminiModel by remember { mutableStateOf(TtsSettingsManager.getGeminiModel(context)) }
     var customApiKey by remember { mutableStateOf(TtsSettingsManager.getGeminiApiKey(context)) }
 
     // Test Voice States
@@ -97,9 +98,11 @@ fun TtsSettingsScreen(modifier: Modifier = Modifier) {
     // Style drop-downs
     var styleDropdownExpanded by remember { mutableStateOf(false) }
     var voiceDropdownExpanded by remember { mutableStateOf(false) }
+    var modelDropdownExpanded by remember { mutableStateOf(false) }
 
     val styles = listOf("Robô Clássico", "Onda Pura", "Ciborgue Distorcido", "Rádio Antigo")
     val geminiVoices = listOf("Kore", "Puck", "Charon", "Fenrir", "Aoede")
+    val geminiModels = listOf("gemini-2.5-flash-preview-tts", "gemini-2.5-flash", "gemini-2.0-flash")
 
     // Loader effect to sync logs periodically
     LaunchedEffect(isPlaying) {
@@ -137,17 +140,18 @@ fun TtsSettingsScreen(modifier: Modifier = Modifier) {
             isPlaying = false
         } else {
             coroutineScope.launch {
-                val apiKey = customApiKey.trim()
+                val apiKey = TtsSettingsManager.getGeminiApiKey(context)
                 if (apiKey.isEmpty() || apiKey == "MY_GEMINI_API_KEY") {
                     Toast.makeText(context, "Chave de API necessária! Por favor, cole sua chave do Google AI Studio nas configurações abaixo.", Toast.LENGTH_LONG).show()
                 } else {
                     isGenerating = true
                     try {
-                        TtsSettingsManager.addSpeechLog(context, testText, "Preview: Gemini ($geminiVoice)")
+                        val modelLabel = geminiModel.replace("gemini-", "")
+                        TtsSettingsManager.addSpeechLog(context, testText, "Preview: Gemini ($geminiVoice - $modelLabel)")
                         logs = TtsSettingsManager.getSpeechLogs(context)
                         
                         val audioBytes = withContext(Dispatchers.IO) {
-                            GeminiApiClient.fetchSpeech(testText, apiKey, geminiVoice)
+                            GeminiApiClient.fetchSpeech(testText, apiKey, geminiVoice, geminiModel)
                         }
                         
                         if (audioBytes != null) {
@@ -292,8 +296,9 @@ fun TtsSettingsScreen(modifier: Modifier = Modifier) {
                             fontWeight = FontWeight.Medium
                         )
                         Spacer(modifier = Modifier.height(2.dp))
+                        val modelLabel = geminiModel.replace("gemini-", "")
                         Text(
-                            text = "Neural Gemini AI\n($geminiVoice)",
+                            text = "Neural Gemini AI\n($geminiVoice - $modelLabel)",
                             color = Color(0xFF001B3E),
                             fontSize = 20.sp,
                             fontWeight = FontWeight.Bold,
@@ -548,10 +553,66 @@ fun TtsSettingsScreen(modifier: Modifier = Modifier) {
                             }
                         }
 
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        // Gemini Model selection dropdown
+                        Text(
+                            text = "Modelo de IA do Gemini",
+                            color = Color(0xFF44474E),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(bottom = 6.dp)
+                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(Color.White)
+                                .border(1.dp, Color(0xFFD3D2D6), RoundedCornerShape(12.dp))
+                                .clickable { modelDropdownExpanded = true }
+                                .padding(12.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = geminiModel,
+                                    color = Color(0xFF1B1B1F),
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Icon(
+                                    imageVector = Icons.Default.ArrowDropDown,
+                                    contentDescription = "Selecionar Modelo",
+                                    tint = Color(0xFF005AC1),
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = modelDropdownExpanded,
+                                onDismissRequest = { modelDropdownExpanded = false },
+                                modifier = Modifier.background(Color.White)
+                            ) {
+                                geminiModels.forEach { model ->
+                                    DropdownMenuItem(
+                                        text = { Text(text = model, color = Color(0xFF1B1B1F)) },
+                                        onClick = {
+                                            geminiModel = model
+                                            TtsSettingsManager.setGeminiModel(context, model)
+                                            modelDropdownExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
                         Spacer(modifier = Modifier.height(16.dp))
 
                         // Visual indicator about the user's API Key being needed or configured
-                        val isKeySetup = customApiKey.trim().isNotEmpty() && customApiKey.trim() != "MY_GEMINI_API_KEY"
+                        val apiKeyToUse = TtsSettingsManager.getGeminiApiKey(context)
+                        val isKeySetup = apiKeyToUse.trim().isNotEmpty() && apiKeyToUse.trim() != "MY_GEMINI_API_KEY"
                         
                         Box(
                             modifier = Modifier
@@ -582,9 +643,15 @@ fun TtsSettingsScreen(modifier: Modifier = Modifier) {
                                 }
                                 Spacer(modifier = Modifier.height(6.dp))
                                 Text(
-                                    text = if (isKeySetup) 
-                                        "Seu sintetizador neural está pronto para operar! A chave informada abaixo será usada para gerar as vozes por IA."
-                                        else "Este aplicativo requer uma chave de API para funcionar. Nenhuma chave vem pré-instalada por segurança. Cole a sua chave do Google AI Studio no campo abaixo para começar.",
+                                    text = if (isKeySetup) {
+                                        if (customApiKey.trim().isEmpty()) {
+                                            "Seu sintetizador neural está pronto para operar! Uma chave de API integrada foi detectada com sucesso do Google AI Studio."
+                                        } else {
+                                            "Seu sintetizador neural está pronto para operar! A chave informada abaixo será usada para gerar as vozes por IA."
+                                        }
+                                    } else {
+                                        "Este aplicativo requer uma chave de API para funcionar. Nenhuma chave vem pré-instalada por segurança. Cole a sua chave do Google AI Studio no campo abaixo para começar."
+                                    },
                                     fontSize = 12.sp,
                                     lineHeight = 16.sp,
                                     color = if (isKeySetup) Color(0xFF155724) else Color(0xFF721C24)

@@ -82,6 +82,7 @@ class MyTtsService : TextToSpeechService() {
 
         val customApiKey = TtsSettingsManager.getGeminiApiKey(this)
         val voiceName = TtsSettingsManager.getVoiceName(this)
+        val geminiModel = TtsSettingsManager.getGeminiModel(this)
 
         runBlocking {
             try {
@@ -91,8 +92,9 @@ class MyTtsService : TextToSpeechService() {
                     TtsSettingsManager.addSpeechLog(applicationContext, textToSpeak, "Erro: Chave API Ausente")
                     callback.error()
                 } else {
-                    TtsSettingsManager.addSpeechLog(applicationContext, textToSpeak, "Gemini AI ($voiceName)")
-                    val audioBytes = GeminiApiClient.fetchSpeech(textToSpeak, apiKey, voiceName)
+                    val modelLabel = geminiModel.replace("gemini-", "")
+                    TtsSettingsManager.addSpeechLog(applicationContext, textToSpeak, "Gemini AI ($voiceName - $modelLabel)")
+                    val audioBytes = GeminiApiClient.fetchSpeech(textToSpeak, apiKey, voiceName, geminiModel)
                     if (audioBytes != null) {
                         val decoded = AudioDecoder.decodeToPcm(audioBytes, cacheDir)
                         if (decoded != null) {
