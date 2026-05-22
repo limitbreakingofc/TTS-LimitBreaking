@@ -80,60 +80,42 @@ class MyTtsService : TextToSpeechService() {
             return
         }
 
-        val useGemini = TtsSettingsManager.isUseGemini(this)
-        val robotPitch = TtsSettingsManager.getRobotPitch(this)
-        val robotSpeed = TtsSettingsManager.getRobotSpeed(this)
-        val robotStyle = TtsSettingsManager.getRobotStyle(this)
         val customApiKey = TtsSettingsManager.getGeminiApiKey(this)
         val voiceName = TtsSettingsManager.getVoiceName(this)
 
-        if (useGemini) {
-            runBlocking {
-                try {
-                    val apiKey = customApiKey.ifBlank { BuildConfig.GEMINI_API_KEY }.trim()
-                    if (apiKey.isEmpty() || apiKey == "MY_GEMINI_API_KEY") {
-                        Log.w(tag, "Chave de API do Gemini não configurada, usando síntese local")
-                        TtsSettingsManager.addSpeechLog(applicationContext, textToSpeak, "$robotStyle (Sem Chave API)")
-                        synthesizeOfflineRobot(textToSpeak, robotSpeed, robotPitch, robotStyle, callback)
-                    } else {
-                        TtsSettingsManager.addSpeechLog(applicationContext, textToSpeak, "Gemini AI ($voiceName)")
-                        val audioBytes = GeminiApiClient.fetchSpeech(textToSpeak, apiKey, voiceName)
-                        if (audioBytes != null) {
-                            val decoded = AudioDecoder.decodeToPcm(audioBytes, cacheDir)
-                            if (decoded != null) {
-                                // Decoded successfully, feed it to the synthesis pipeline
-                                callback.start(decoded.sampleRate, android.media.AudioFormat.ENCODING_PCM_16BIT, decoded.channelCount)
-                                callback.audioAvailable(decoded.pcmData, 0, decoded.pcmData.size)
-                                callback.done()
-                            } else {
-                                Log.e(tag, "Erro ao decodificar a voz do Gemini, usando fallback")
-                                synthesizeOfflineRobot(textToSpeak, robotSpeed, robotPitch, robotStyle, callback)
-                            }
+        runBlocking {
+            try {
+                val apiKey = customApiKey.trim()
+                if (apiKey.isEmpty() || apiKey == "MY_GEMINI_API_KEY") {
+                    Log.w(tag, "Chave de API do Gemini não configurada pelo usuário")
+                    TtsSettingsManager.addSpeechLog(applicationContext, textToSpeak, "Erro: Chave API Ausente")
+                    callback.error()
+                } else {
+                    TtsSettingsManager.addSpeechLog(applicationContext, textToSpeak, "Gemini AI ($voiceName)")
+                    val audioBytes = GeminiApiClient.fetchSpeech(textToSpeak, apiKey, voiceName)
+                    if (audioBytes != null) {
+                        val decoded = AudioDecoder.decodeToPcm(audioBytes, cacheDir)
+                        if (decoded != null) {
+                            // Decoded successfully, feed it to the synthesis pipeline
+                            callback.start(decoded.sampleRate, android.media.AudioFormat.ENCODING_PCM_16BIT, decoded.channelCount)
+                            callback.audioAvailable(decoded.pcmData, 0, decoded.pcmData.size)
+                            callback.done()
                         } else {
-                            Log.e(tag, "Retorno da API Gemini nulo, usando fallback")
-                            synthesizeOfflineRobot(textToSpeak, robotSpeed, robotPitch, robotStyle, callback)
+                            Log.e(tag, "Erro ao decodificar a voz do Gemini")
+                            TtsSettingsManager.addSpeechLog(applicationContext, textToSpeak, "Erro: Falha na Decodificação")
+                            callback.error()
                         }
+                    } else {
+                        Log.e(tag, "Retorno da API Gemini nulo")
+                        TtsSettingsManager.addSpeechLog(applicationContext, textToSpeak, "Erro: Falha na API")
+                        callback.error()
                     }
-                } catch (e: Exception) {
-                    Log.e(tag, "Erro de rede / rede Gemini: ${e.message}", e)
-                    synthesizeOfflineRobot(textToSpeak, robotSpeed, robotPitch, robotStyle, callback)
                 }
+            } catch (e: Exception) {
+                Log.e(tag, "Erro na síntese Gemini: ${e.message}", e)
+                TtsSettingsManager.addSpeechLog(applicationContext, textToSpeak, "Erro: ${e.message}")
+                callback.error()
             }
-        } else {
-            TtsSettingsManager.addSpeechLog(this, textToSpeak, robotStyle)
-            synthesizeOfflineRobot(textToSpeak, robotSpeed, robotPitch, robotStyle, callback)
-        }
-    }
-
-    private fun synthesizeOfflineRobot(text: String, speed: Float, pitch: Float, style: String, callback: SynthesisCallback) {
-        try {
-            val audioData = ProceduralRobotSynth.synthesize(text, speed, pitch, style)
-            callback.start(16000, android.media.AudioFormat.ENCODING_PCM_16BIT, 1)
-            callback.audioAvailable(audioData, 0, audioData.size)
-            callback.done()
-        } catch (e: Exception) {
-            Log.e(tag, "Erro de processamento robô local: ${e.message}", e)
-            callback.error()
         }
     }
 }

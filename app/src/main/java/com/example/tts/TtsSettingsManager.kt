@@ -20,7 +20,7 @@ object TtsSettingsManager {
     }
 
     fun isUseGemini(context: Context): Boolean {
-        return getPrefs(context).getBoolean(KEY_USE_GEMINI, false)
+        return getPrefs(context).getBoolean(KEY_USE_GEMINI, true)
     }
 
     fun setUseGemini(context: Context, value: Boolean) {

@@ -137,15 +137,12 @@ fun TtsSettingsScreen(modifier: Modifier = Modifier) {
             isPlaying = false
         } else {
             coroutineScope.launch {
-                isGenerating = true
-                if (useGemini) {
-                    val apiKey = customApiKey.ifBlank { com.example.BuildConfig.GEMINI_API_KEY }.trim()
-                    if (apiKey.isEmpty() || apiKey == "MY_GEMINI_API_KEY") {
-                        withContext(Dispatchers.Main) {
-                            Toast.makeText(context, "Configure uma Chave API válida ou desative a Voz IA.", Toast.LENGTH_LONG).show()
-                            isGenerating = false
-                        }
-                    } else {
+                val apiKey = customApiKey.trim()
+                if (apiKey.isEmpty() || apiKey == "MY_GEMINI_API_KEY") {
+                    Toast.makeText(context, "Chave de API necessária! Por favor, cole sua chave do Google AI Studio nas configurações abaixo.", Toast.LENGTH_LONG).show()
+                } else {
+                    isGenerating = true
+                    try {
                         TtsSettingsManager.addSpeechLog(context, testText, "Preview: Gemini ($geminiVoice)")
                         logs = TtsSettingsManager.getSpeechLogs(context)
                         
@@ -168,30 +165,16 @@ fun TtsSettingsScreen(modifier: Modifier = Modifier) {
                                     onComplete = { isPlaying = false }
                                 )
                             } else {
-                                Toast.makeText(context, "Erro decodificando áudio neural.", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "Erro decodificando o áudio neural obtido.", Toast.LENGTH_SHORT).show()
                             }
                         } else {
                             isGenerating = false
-                            Toast.makeText(context, "Conexão com Gemini falhou. Use o Robô Clássico.", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Erro na API: Verifique sua chave API do AI Studio ou sua conexão de internet.", Toast.LENGTH_LONG).show()
                         }
+                    } catch (e: Exception) {
+                        isGenerating = false
+                        Toast.makeText(context, "Erro ao gerar: ${e.message}", Toast.LENGTH_LONG).show()
                     }
-                } else {
-                    TtsSettingsManager.addSpeechLog(context, testText, "Preview: $robotStyle")
-                    logs = TtsSettingsManager.getSpeechLogs(context)
-                    isGenerating = false
-                    isPlaying = true
-                    
-                    val audioBytes = withContext(Dispatchers.IO) {
-                        ProceduralRobotSynth.synthesize(testText, robotSpeed, robotPitch, robotStyle)
-                    }
-                    
-                    playPcmBuffer(
-                        audioBytes,
-                        16000,
-                        1,
-                        onStart = { track -> activeAudioTrack = track },
-                        onComplete = { isPlaying = false }
-                    )
                 }
             }
         }
@@ -310,7 +293,7 @@ fun TtsSettingsScreen(modifier: Modifier = Modifier) {
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = if (useGemini) "Neural Gemini AI\n($geminiVoice)" else "Sintetizador Local\n($robotStyle)",
+                            text = "Neural Gemini AI\n($geminiVoice)",
                             color = Color(0xFF001B3E),
                             fontSize = 20.sp,
                             fontWeight = FontWeight.Bold,
@@ -503,320 +486,169 @@ fun TtsSettingsScreen(modifier: Modifier = Modifier) {
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Configuração do Sintetizador",
+                                text = "Configuração da Voz por IA",
                                 color = Color(0xFF1B1B1F),
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         }
+                        
                         Spacer(modifier = Modifier.height(14.dp))
 
-                        // Switch: Gemini AI Voice
-                        Row(
+                        // Model selection dropdown
+                        Text(
+                            text = "Voz Neural do Gemini",
+                            color = Color(0xFF44474E),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(bottom = 6.dp)
+                        )
+                        Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(16.dp))
+                                .clip(RoundedCornerShape(12.dp))
                                 .background(Color.White)
-                                .border(1.dp, Color(0xFFE3E2E6), RoundedCornerShape(16.dp))
-                                .padding(12.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                                .border(1.dp, Color(0xFFD3D2D6), RoundedCornerShape(12.dp))
+                                .clickable { voiceDropdownExpanded = true }
+                                .padding(12.dp)
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
                                 Text(
-                                    text = "Voz Neural Gemini IA",
+                                    text = geminiVoice,
                                     color = Color(0xFF1B1B1F),
                                     fontSize = 14.sp,
-                                    fontWeight = FontWeight.Bold
+                                    fontWeight = FontWeight.Medium
                                 )
-                                Text(
-                                    text = "Usa IA Generativa (Internet)",
-                                    color = Color(0xFF44474E),
-                                    fontSize = 11.sp
+                                Icon(
+                                    imageVector = Icons.Default.ArrowDropDown,
+                                    contentDescription = "Selecionar Voz",
+                                    tint = Color(0xFF005AC1),
+                                    modifier = Modifier.size(24.dp)
                                 )
                             }
-                            Switch(
-                                checked = useGemini,
-                                onCheckedChange = {
-                                    useGemini = it
-                                    TtsSettingsManager.setUseGemini(context, it)
-                                    if (isPlaying) {
-                                        try { activeAudioTrack?.stop(); activeAudioTrack?.release() } catch (e: Exception) {}
-                                        isPlaying = false
-                                    }
-                                },
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = Color(0xFF005AC1),
-                                    checkedTrackColor = Color(0xFFD8E2FF),
-                                    uncheckedThumbColor = Color(0xFF94A3B8),
-                                    uncheckedTrackColor = Color(0xFFE3E2E6)
-                                ),
-                                modifier = Modifier.testTag("gemini_voice_switch")
-                            )
+                            DropdownMenu(
+                                expanded = voiceDropdownExpanded,
+                                onDismissRequest = { voiceDropdownExpanded = false },
+                                modifier = Modifier.background(Color.White)
+                            ) {
+                                geminiVoices.forEach { voice ->
+                                    DropdownMenuItem(
+                                        text = { Text(text = voice, color = Color(0xFF1B1B1F)) },
+                                        onClick = {
+                                            geminiVoice = voice
+                                            TtsSettingsManager.setVoiceName(context, voice)
+                                            voiceDropdownExpanded = false
+                                        }
+                                    )
+                                }
+                            }
                         }
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        if (useGemini) {
-                            // Gemini Config Layout
-                            Text(
-                                text = "Modelo de Voz Neural",
-                                color = Color(0xFF44474E),
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(bottom = 6.dp)
-                            )
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(Color.White)
-                                    .border(1.dp, Color(0xFFD3D2D6), RoundedCornerShape(12.dp))
-                                    .clickable { voiceDropdownExpanded = true }
-                                    .padding(12.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text(text = geminiVoice, color = Color(0xFF1B1B1F), fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                        // Visual indicator about the user's API Key being needed or configured
+                        val isKeySetup = customApiKey.trim().isNotEmpty() && customApiKey.trim() != "MY_GEMINI_API_KEY"
+                        
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(if (isKeySetup) Color(0xFFD1E7DD) else Color(0xFFF8D7DA))
+                                .border(
+                                    BorderStroke(1.dp, if (isKeySetup) Color(0xFFA3CFBB) else Color(0xFFF5C2C7)),
+                                    RoundedCornerShape(16.dp)
+                                )
+                                .padding(14.dp)
+                        ) {
+                            Column {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(
-                                        imageVector = Icons.Default.PlayArrow,
+                                        imageVector = if (isKeySetup) Icons.Default.CheckCircle else Icons.Default.Warning,
                                         contentDescription = null,
-                                        tint = Color(0xFF005AC1),
-                                        modifier = Modifier.size(16.dp)
+                                        tint = if (isKeySetup) Color(0xFF0F5132) else Color(0xFF842029),
+                                        modifier = Modifier.size(20.dp)
                                     )
-                                }
-                                DropdownMenu(
-                                    expanded = voiceDropdownExpanded,
-                                    onDismissRequest = { voiceDropdownExpanded = false },
-                                    modifier = Modifier.background(Color.White)
-                                ) {
-                                    geminiVoices.forEach { voice ->
-                                        DropdownMenuItem(
-                                            text = { Text(text = voice, color = Color(0xFF1B1B1F)) },
-                                            onClick = {
-                                                geminiVoice = voice
-                                                TtsSettingsManager.setVoiceName(context, voice)
-                                                voiceDropdownExpanded = false
-                                            }
-                                        )
-                                    }
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(16.dp))
-
-                            Card(
-                                shape = RoundedCornerShape(16.dp),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = Color(0xFFF0F4F9)
-                                ),
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
-                            ) {
-                                Column(modifier = Modifier.padding(16.dp)) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(
-                                            imageVector = Icons.Default.Info,
-                                            contentDescription = "Info Chave Gemini",
-                                            tint = Color(0xFF005AC1),
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text(
-                                            text = "Como funciona a Voz IA Gratuita?",
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 14.sp,
-                                            color = Color(0xFF005AC1)
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        text = "A voz neural do Gemini utiliza chaves de API totalmente gratuitas geradas no Google AI Studio. Você pode criar e usar a sua própria chave pessoal grátis em poucos segundos!",
-                                        fontSize = 11.sp,
-                                        color = Color(0xFF44474E),
-                                        lineHeight = 15.sp
-                                    )
-                                    Spacer(modifier = Modifier.height(12.dp))
-                                    Button(
-                                        onClick = {
-                                            try {
-                                                val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://aistudio.google.com/app/apikey"))
-                                                context.startActivity(intent)
-                                            } catch (e: Exception) {
-                                                Toast.makeText(context, "Erro ao abrir site", Toast.LENGTH_SHORT).show()
-                                            }
-                                        },
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = Color(0xFF005AC1),
-                                            contentColor = Color.White
-                                        ),
-                                        shape = RoundedCornerShape(100.dp),
-                                        modifier = Modifier.align(Alignment.End).testTag("get_free_key_button")
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.PlayArrow,
-                                            contentDescription = "Abrir Link",
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Obter Chave Grátis", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                    }
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.height(12.dp))
-
-                            Text(
-                                text = "Chave API do Gemini (Opcional)",
-                                color = Color(0xFF44474E),
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(bottom = 6.dp)
-                            )
-                            OutlinedTextField(
-                                value = customApiKey,
-                                onValueChange = {
-                                    customApiKey = it
-                                    TtsSettingsManager.setGeminiApiKey(context, it)
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(12.dp),
-                                singleLine = true,
-                                visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedTextColor = Color(0xFF1B1B1F),
-                                    unfocusedTextColor = Color(0xFF1B1B1F),
-                                    focusedContainerColor = Color.White,
-                                    unfocusedContainerColor = Color.White,
-                                    focusedBorderColor = Color(0xFF005AC1),
-                                    unfocusedBorderColor = Color(0xFFD3D2D6)
-                                ),
-                                placeholder = { Text("Cole sua chave livre do AI Studio aqui", color = Color(0xFF8E9099), fontSize = 12.sp) }
-                            )
-                            Text(
-                                text = "O app utiliza a chave de compilação ou a sua chave colada se configurada.",
-                                color = Color(0xFF44474E),
-                                fontSize = 10.sp,
-                                modifier = Modifier.padding(top = 4.dp)
-                            )
-                        } else {
-                            // Local Synthesizer parameters (Pitch, Speed, Model style)
-                            Text(
-                                text = "Estilo de Sintetizador Local",
-                                color = Color(0xFF44474E),
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(bottom = 6.dp)
-                            )
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(Color.White)
-                                    .border(1.dp, Color(0xFFD3D2D6), RoundedCornerShape(12.dp))
-                                    .clickable { styleDropdownExpanded = true }
-                                    .padding(12.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text(text = robotStyle, color = Color(0xFF1B1B1F), fontSize = 14.sp, fontWeight = FontWeight.Medium)
-                                    Icon(
-                                        imageVector = Icons.Default.PlayArrow,
-                                        contentDescription = null,
-                                        tint = Color(0xFF005AC1),
-                                        modifier = Modifier.size(16.dp)
+                                        text = if (isKeySetup) "Chave de API Configurada" else "Chave API Necessária",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp,
+                                        color = if (isKeySetup) Color(0xFF0F5132) else Color(0xFF842029)
                                     )
                                 }
-                                DropdownMenu(
-                                    expanded = styleDropdownExpanded,
-                                    onDismissRequest = { styleDropdownExpanded = false },
-                                    modifier = Modifier.background(Color.White)
-                                ) {
-                                    styles.forEach { styleOpt ->
-                                        DropdownMenuItem(
-                                            text = { Text(text = styleOpt, color = Color(0xFF1B1B1F)) },
-                                            onClick = {
-                                                robotStyle = styleOpt
-                                                TtsSettingsManager.setRobotStyle(context, styleOpt)
-                                                styleDropdownExpanded = false
-                                            }
-                                        )
-                                    }
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = if (isKeySetup) 
+                                        "Seu sintetizador neural está pronto para operar! A chave informada abaixo será usada para gerar as vozes por IA."
+                                        else "Este aplicativo requer uma chave de API para funcionar. Nenhuma chave vem pré-instalada por segurança. Cole a sua chave do Google AI Studio no campo abaixo para começar.",
+                                    fontSize = 12.sp,
+                                    lineHeight = 16.sp,
+                                    color = if (isKeySetup) Color(0xFF155724) else Color(0xFF721C24)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Outlined Text Field for key
+                        Text(
+                            text = "Chave API do Google AI Studio",
+                            color = Color(0xFF44474E),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(bottom = 6.dp)
+                        )
+                        OutlinedTextField(
+                            value = customApiKey,
+                            onValueChange = {
+                                customApiKey = it
+                                TtsSettingsManager.setGeminiApiKey(context, it)
+                            },
+                            modifier = Modifier.fillMaxWidth().testTag("custom_api_key_input"),
+                            shape = RoundedCornerShape(12.dp),
+                            singleLine = true,
+                            visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = Color(0xFF1B1B1F),
+                                unfocusedTextColor = Color(0xFF1B1B1F),
+                                focusedContainerColor = Color.White,
+                                unfocusedContainerColor = Color.White,
+                                focusedBorderColor = Color(0xFF005AC1),
+                                unfocusedBorderColor = Color(0xFFD3D2D6)
+                            ),
+                            placeholder = { Text("Cole sua chave livre do AI Studio aqui (AIzaSy...)", color = Color(0xFF8E9099), fontSize = 12.sp) }
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Direct button to open Google AI Studio and generate an API key
+                        Button(
+                            onClick = {
+                                try {
+                                    val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://aistudio.google.com/app/apikey"))
+                                    context.startActivity(intent)
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "Erro ao abrir site", Toast.LENGTH_SHORT).show()
                                 }
-                            }
-
-                            Spacer(modifier = Modifier.height(16.dp))
-
-                            // Pitch parameter Slider
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "Modulação de Tom",
-                                    color = Color(0xFF44474E),
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = "${String.format("%.2f", robotPitch)}x",
-                                    color = Color(0xFF005AC1),
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Black
-                                )
-                            }
-                            Slider(
-                                value = robotPitch,
-                                onValueChange = {
-                                    robotPitch = it
-                                    TtsSettingsManager.setRobotPitch(context, it)
-                                },
-                                valueRange = 0.4f..2.5f,
-                                colors = SliderDefaults.colors(
-                                    thumbColor = Color(0xFF005AC1),
-                                    activeTrackColor = Color(0xFF005AC1),
-                                    inactiveTrackColor = Color(0xFFD8E2FF)
-                                )
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFF005AC1),
+                                contentColor = Color.White
+                            ),
+                            shape = RoundedCornerShape(100.dp),
+                            modifier = Modifier.align(Alignment.End).testTag("get_free_key_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PlayArrow,
+                                contentDescription = "Obter Chave Grátis",
+                                modifier = Modifier.size(16.dp)
                             )
-
-                            Spacer(modifier = Modifier.height(10.dp))
-
-                            // Speed parameter Slider
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "Velocidade da Fala",
-                                    color = Color(0xFF44474E),
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = "${String.format("%.2f", robotSpeed)}x",
-                                    color = Color(0xFF005AC1),
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Black
-                                )
-                            }
-                            Slider(
-                                value = robotSpeed,
-                                onValueChange = {
-                                    robotSpeed = it
-                                    TtsSettingsManager.setRobotSpeed(context, it)
-                                },
-                                valueRange = 0.5f..3.0f,
-                                colors = SliderDefaults.colors(
-                                    thumbColor = Color(0xFF005AC1),
-                                    activeTrackColor = Color(0xFF005AC1),
-                                    inactiveTrackColor = Color(0xFFD8E2FF)
-                                )
-                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Criar Chave API Gratuita no Google AI Studio", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
