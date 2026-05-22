@@ -6,6 +6,13 @@ plugins {
   alias(libs.plugins.secrets)
 }
 
+// Automatically generate local .env file using the API key from the Google AI Studio environment
+val envFileForSecrets = file("${rootDir}/.env")
+val geminiKeyFromPlatform = System.getenv("GEMINI_API_KEY") ?: ""
+if (geminiKeyFromPlatform.isNotBlank() && geminiKeyFromPlatform != "MY_GEMINI_API_KEY") {
+  envFileForSecrets.writeText("GEMINI_API_KEY=$geminiKeyFromPlatform\n")
+}
+
 android {
   namespace = "com.example"
   compileSdk { version = release(36) { minorApiLevel = 1 } }

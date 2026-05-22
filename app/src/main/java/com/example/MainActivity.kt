@@ -607,6 +607,66 @@ fun TtsSettingsScreen(modifier: Modifier = Modifier) {
 
                             Spacer(modifier = Modifier.height(16.dp))
 
+                            Card(
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = Color(0xFFF0F4F9)
+                                ),
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(16.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Default.Info,
+                                            contentDescription = "Info Chave Gemini",
+                                            tint = Color(0xFF005AC1),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = "Como funciona a Voz IA Gratuita?",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 14.sp,
+                                            color = Color(0xFF005AC1)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = "A voz neural do Gemini utiliza chaves de API totalmente gratuitas geradas no Google AI Studio. Você pode criar e usar a sua própria chave pessoal grátis em poucos segundos!",
+                                        fontSize = 11.sp,
+                                        color = Color(0xFF44474E),
+                                        lineHeight = 15.sp
+                                    )
+                                    Spacer(modifier = Modifier.height(12.dp))
+                                    Button(
+                                        onClick = {
+                                            try {
+                                                val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://aistudio.google.com/app/apikey"))
+                                                context.startActivity(intent)
+                                            } catch (e: Exception) {
+                                                Toast.makeText(context, "Erro ao abrir site", Toast.LENGTH_SHORT).show()
+                                            }
+                                        },
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = Color(0xFF005AC1),
+                                            contentColor = Color.White
+                                        ),
+                                        shape = RoundedCornerShape(100.dp),
+                                        modifier = Modifier.align(Alignment.End).testTag("get_free_key_button")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.PlayArrow,
+                                            contentDescription = "Abrir Link",
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Obter Chave Grátis", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
                             Text(
                                 text = "Chave API do Gemini (Opcional)",
                                 color = Color(0xFF44474E),
@@ -632,10 +692,10 @@ fun TtsSettingsScreen(modifier: Modifier = Modifier) {
                                     focusedBorderColor = Color(0xFF005AC1),
                                     unfocusedBorderColor = Color(0xFFD3D2D6)
                                 ),
-                                placeholder = { Text("Ignorar se já houver .env inserido", color = Color(0xFF8E9099), fontSize = 12.sp) }
+                                placeholder = { Text("Cole sua chave livre do AI Studio aqui", color = Color(0xFF8E9099), fontSize = 12.sp) }
                             )
                             Text(
-                                text = "Por padrão, o app utiliza a chave segura vinculada pelo AI Studio.",
+                                text = "O app utiliza a chave de compilação ou a sua chave colada se configurada.",
                                 color = Color(0xFF44474E),
                                 fontSize = 10.sp,
                                 modifier = Modifier.padding(top = 4.dp)
